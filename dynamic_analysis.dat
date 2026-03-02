@@ -1,0 +1,122 @@
+new
+RES Model_03_pwater.sav
+;ini xdis 0 ydis 0 zdis 0
+;ini xvel 0 yvel 0 zdis 0
+config dyn
+set dyn on
+;
+set dyn damp local 0.157;=pi*0.1571
+;set dyn damp rayleigh 0.02873 9.935	; mass and stiffness
+;ini damp hyst sig3 1.1 -0.65 -1.35 ; dy3_
+;ini damp hyst sig4 0.9762 -0.4393 -1.285 0.03154 ; dy4_
+;ini damp hyst default -3.5 1.3; dy2_
+;ini damp hyst hardin 0.06  ; dy1_
+;-----------damping rayleigh 0.03 17
+free  x z
+fix y
+; boundary
+fix y
+[x_1 = x0 - 0.1]
+[x_2 = x0 + 0.1]
+apply squiet nquiet dquiet range x @x_1 @x_2
+[x_1 = x5 - 0.1]
+[x_2 = x5 + 0.1]
+apply squiet nquiet dquiet range x @x_1 @x_2
+[z_1 = z0 - 0.1]
+[z_2 = z0 + 0.1]
+apply squiet nquiet dquiet range z @z_1 @z_2
+;
+def acc_amp
+  x_amp =2.0
+  y_amp = 0.0
+  z_amp = 0.0
+  ; acc_nam ='jin' ; 0s -20
+  ;acc_name ='eicentro' ; 16s 1.3
+  ;acc_name ='taft' ; 16s 1.35
+  ;acc_name ='sin' ; 40s f=1.0 dt=0.01
+  ;acc_name ='sin2' ; 40s f=1.0 dt=0.02
+  ;acc_name ='sin3' ; 40s f=2.5 dt=0.02 
+  ;acc_name ='sin4' ; 20s f=1.5 dt=0.01
+  ;acc_name ='sin5' ; 20s f=1.0 dt=0.02 larger than 0.01 fs=2.0
+  ;acc_name ='sin6' ; 20s f=1.0 dt=0. 01
+  ;acc_name ='jin0'
+  acc_name ='taft2'
+  acc_name_file=acc_name+'.txt'
+  acc_time=15                                           
+end
+@acc_amp
+apply ff
+table 1 read @acc_name_file
+;
+apply xacc @x_amp hist table 1 range z @z_1 @z_2
+apply zacc @z_amp hist table 1 range z @z_1 @z_2
+;
+hist reset
+;call point.txt
+call pointmirror.txt
+;
+hist id 10 dytime
+;sav dymode.sav
+;----------------------------------------------
+;call 000slope.txt
+;call 000slopeyg.txt
+call 000slopeygdyna.txt
+;
+[num_tim = 0]
+def cyc_loading
+  while_stepping
+  cal_time = dytime
+  if cal_time >= 0.1*num_tim then
+    num_tim = num_tim + 1
+    FOS_cyc
+  endif
+end
+;
+save time1111.sav
+solve age @acc_time
+[acc_name=acc_name+'_'+string(fss)+'_'+string(x_amp)+'.sav']
+sav @acc_name
+save time2222.sav
+;
+
+return
+;----------------------------------------------
+; save element stress of dynamic by each step
+def set_arra
+  array buf(1)
+  ss_name = 'dy_'+acc_name+'_'+string(fss)+'_'+string(x_amp)+'.dat'
+  oo=open(ss_name,1,1)
+  buf(1)='cyc, zone, dtsxx, dtszz, dtsxz'
+  oo=write(buf,1)
+  num_tim = 0
+end
+@set_arra
+;
+def cyc_loading
+  while_stepping
+  cal_time = dytime
+  if cal_time >= 0.02*num_tim then
+    buf(1)=''
+    num_tim = num_tim + 1
+    zpnt = zone_head
+    loop while zpnt # null
+      ele_id = z_id(zpnt)
+      if ele_id <= num_z then
+        dtsxx = z_sxx(zpnt)/1000	;kPa
+        dtszz = z_szz(zpnt)/1000
+        dtsxz = z_sxz(zpnt)/1000
+        buf(1)=buf(1)+string(num_tim)+','+string(ele_id)+','+string(dtsxx)+','+string(dtszz)+','+string(dtsxz)+'\n'
+      endif
+      zpnt = z_next(zpnt)
+    end_loop
+    oo=write(buf,1)
+  endif
+end
+
+solve age @acc_time
+[acc_name=acc_name+'_'+string(fss)+'_'+string(x_amp)+'yg.sav']
+[oo=close]
+sav @acc_name
+save taft150111.sav
+ret
+solve
