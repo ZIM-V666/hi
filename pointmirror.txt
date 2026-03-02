@@ -1,0 +1,113 @@
+; =============================================================================
+; pointmirror.txt
+; History monitoring points for the high earth-rockfill dam
+; Symmetric (mirror) set: upstream and downstream faces at matched elevations
+;
+; Point layout (schematic cross-section, not to scale):
+;
+;          P9 (dam crest)
+;         /               \
+;       P7                 P8   <- upper slope
+;     /                         \
+;   P5                             P6  <- mid slope
+;  /                                    \
+; P3                                      P4  <- lower slope / berm
+; |                                            |
+; P1 (upstream toe)                       P2 (downstream toe)
+; |_______________ base __________________|
+; P11 (deep overburden, upstream)    P12 (deep overburden, downstream)
+;
+; Coordinate origin is at the upstream base corner of the dam.
+; Adjust grid point IDs to match the actual mesh.
+; =============================================================================
+
+; ---------- Displacement histories ----------
+; Dam crest (x_crest, z_crest)
+hist id 101  xdis gp  id p_c
+hist id 102  zdis gp  id p_c
+
+; Upstream slope – upper third
+hist id 111  xdis gp  id p_us1
+hist id 112  zdis gp  id p_us1
+
+; Upstream slope – mid-height
+hist id 113  xdis gp  id p_us2
+hist id 114  zdis gp  id p_us2
+
+; Upstream slope – lower third
+hist id 115  xdis gp  id p_us3
+hist id 116  zdis gp  id p_us3
+
+; Downstream slope – upper third (mirror of upstream)
+hist id 121  xdis gp  id p_ds1
+hist id 122  zdis gp  id p_ds1
+
+; Downstream slope – mid-height
+hist id 123  xdis gp  id p_ds2
+hist id 124  zdis gp  id p_ds2
+
+; Downstream slope – lower third
+hist id 125  xdis gp  id p_ds3
+hist id 126  zdis gp  id p_ds3
+
+; Upstream toe
+hist id 131  xdis gp  id p_ut
+hist id 132  zdis gp  id p_ut
+
+; Downstream toe
+hist id 133  xdis gp  id p_dt
+hist id 134  zdis gp  id p_dt
+
+; Deep overburden – below dam axis, mid-depth
+hist id 141  xdis gp  id p_ob1
+hist id 142  zdis gp  id p_ob1
+
+; Deep overburden – near bedrock
+hist id 143  xdis gp  id p_ob2
+hist id 144  zdis gp  id p_ob2
+
+; ---------- Velocity histories ----------
+; Dam crest
+hist id 201  xvel gp  id p_c
+hist id 202  zvel gp  id p_c
+
+; Upstream slope – mid-height
+hist id 211  xvel gp  id p_us2
+hist id 212  zvel gp  id p_us2
+
+; Downstream slope – mid-height
+hist id 213  xvel gp  id p_ds2
+hist id 214  zvel gp  id p_ds2
+
+; ---------- Acceleration histories ----------
+; Dam crest
+hist id 301  xacc gp  id p_c
+hist id 302  zacc gp  id p_c
+
+; Upstream slope – mid-height
+hist id 311  xacc gp  id p_us2
+hist id 312  zacc gp  id p_us2
+
+; Downstream slope – mid-height
+hist id 313  xacc gp  id p_ds2
+hist id 314  zacc gp  id p_ds2
+
+; Base (input motion reference point)
+hist id 321  xacc gp  id p_base
+hist id 322  zacc gp  id p_base
+
+; ---------- Stress histories (zone centres) ----------
+; Core zone – dam axis, mid-height
+hist id 401  szz  zone id z_core_mid
+hist id 402  sxx  zone id z_core_mid
+hist id 403  sxz  zone id z_core_mid
+hist id 404  pp   zone id z_core_mid  ; pore pressure
+
+; Rockfill zone – downstream shell, mid-height
+hist id 411  szz  zone id z_shell_mid
+hist id 412  sxx  zone id z_shell_mid
+
+; Overburden zone – below dam, mid-depth
+hist id 421  szz  zone id z_ob_mid
+hist id 422  sxx  zone id z_ob_mid
+hist id 423  pp   zone id z_ob_mid

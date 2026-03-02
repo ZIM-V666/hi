@@ -1,0 +1,110 @@
+; =============================================================================
+; 000slopeygdyna.txt
+; Dynamic slope stability: cyclic Factor of Safety (FOS) by phi-c reduction
+;
+; Called once from dynamic_analysis.dat to define the FOS_cyc FISH function.
+; FOS_cyc is then invoked every 0.1 s of dynamic time (see cyc_loading).
+;
+; Method: Instantaneous strength-reduction (phi-c reduction) applied as a
+; snapshot of the current stress state.  The dam is assumed to use a
+; Mohr-Coulomb constitutive model for core and shell zones.
+; NOTE: z_model() returns the lower-case model name in FLAC3D 3.x, e.g.
+;       'mohr-coulomb'.  Adjust comparisons if using a different version.
+;
+; Global variables written:
+;   fss  – current slope factor of safety
+;   fss_min – minimum FOS recorded during the earthquake
+; =============================================================================
+
+; Initialise FOS tracking globals
+def init_fos
+  fss     = 1.0
+  fss_min = 9999.0
+  fos_id  = 0       ; FOS history index counter
+end
+@init_fos
+
+; --- Strength-reduction FOS sub-routine ---
+; Stores original strength parameters, reduces them until slope fails,
+; then restores original values and returns.
+def FOS_cyc
+  local fac_lo  = 1.0
+  local fac_hi  = 3.0
+  local fac_try
+  local tol     = 0.005   ; convergence tolerance on FOS
+  local max_cyc = 2000    ; max equilibrium cycles per trial
+  local nit     = 0
+
+  ; Save original Mohr-Coulomb parameters for all zones
+  def _save_mc
+    zp = zone_head
+    loop while zp # null
+      if z_model(zp) = 'mohr-coulomb' then
+        z_prop(zp, 'coh_ini')   = z_prop(zp, 'cohesion')
+        z_prop(zp, 'fric_ini')  = z_prop(zp, 'friction')
+        z_prop(zp, 'tens_ini')  = z_prop(zp, 'tension')
+      endif
+      zp = z_next(zp)
+    end_loop
+  end
+  _save_mc
+
+  ; Bisection loop for strength-reduction factor
+  loop while (fac_hi - fac_lo) > tol
+    fac_try = 0.5 * (fac_lo + fac_hi)
+    ; Apply reduced strength
+    def _apply_red
+      zp = zone_head
+      loop while zp # null
+        if z_model(zp) = 'mohr-coulomb' then
+          local c0   = z_prop(zp, 'coh_ini')
+          local phi0 = z_prop(zp, 'fric_ini') * degrad  ; convert to radians
+          ; Reduced friction angle
+          local phi_r = atan(tan(phi0) / fac_try)
+          z_prop(zp, 'cohesion')  = c0 / fac_try
+          z_prop(zp, 'friction')  = phi_r / degrad       ; store in degrees
+          z_prop(zp, 'tension')   = 0.0
+        endif
+        zp = z_next(zp)
+      end_loop
+    end
+    _apply_red
+
+    ; Brief static solve to check equilibrium
+    set mech on
+    set dyn off
+    solve ratio 1e-4 cycle max_cyc
+    set mech off
+    set dyn on
+
+    if unbal_max < 1e-3 then
+      fac_lo = fac_try   ; stable – increase factor
+    else
+      fac_hi = fac_try   ; unstable – decrease factor
+    endif
+  end_loop
+
+  fss = 0.5 * (fac_lo + fac_hi)
+  if fss < fss_min then
+    fss_min = fss
+  endif
+  fos_id = fos_id + 1
+
+  ; Restore original strength parameters
+  def _restore_mc
+    zp = zone_head
+    loop while zp # null
+      if z_model(zp) = 'mohr-coulomb' then
+        z_prop(zp, 'cohesion')  = z_prop(zp, 'coh_ini')
+        z_prop(zp, 'friction')  = z_prop(zp, 'fric_ini')
+        z_prop(zp, 'tension')   = z_prop(zp, 'tens_ini')
+      endif
+      zp = z_next(zp)
+    end_loop
+  end
+  _restore_mc
+end
+
+; --- History: FOS vs dynamic time ---
+hist id 500  fish fss
+hist id 501  fish fss_min

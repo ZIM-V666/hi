@@ -1,0 +1,142 @@
+; =============================================================================
+; Dynamic Response and Stability Analysis of High Earth-Rockfill Dam
+; with Deep Overburden under Strong Earthquake Loading
+;
+; FLAC3D dynamic analysis script
+; Seismic input: Taft 1952 (taft2.txt), horizontal PGA amplified x2.0
+; Duration: 15 s, local damping ratio 5%
+; FOS evaluated every 0.1 s via cyclic strength-reduction (000slopeygdyna.txt)
+; =============================================================================
+
+new
+RES Model_03_pwater.sav
+;ini xdis 0 ydis 0 zdis 0
+;ini xvel 0 yvel 0 zvel 0
+config dyn
+set dyn on
+;
+; --- Damping ---
+; Local (viscous) damping: lambda = pi * xi = pi * 0.05 ≈ 0.157
+set dyn damp local 0.157
+;set dyn damp rayleigh 0.02873 9.935      ; mass and stiffness proportional
+;ini damp hyst sig3 1.1 -0.65 -1.35       ; hysteretic sig3 model
+;ini damp hyst sig4 0.9762 -0.4393 -1.285 0.03154 ; hysteretic sig4 model
+;ini damp hyst default -3.5 1.3           ; default hysteretic model
+;ini damp hyst hardin 0.06               ; Hardin hysteretic model
+
+; --- Boundary conditions ---
+free  x z
+fix y
+; Quiet (absorbing) boundaries on lateral faces and base
+[x_1 = x0 - 0.1]
+[x_2 = x0 + 0.1]
+apply squiet nquiet dquiet range x @x_1 @x_2
+[x_1 = x5 - 0.1]
+[x_2 = x5 + 0.1]
+apply squiet nquiet dquiet range x @x_1 @x_2
+[z_1 = z0 - 0.1]
+[z_2 = z0 + 0.1]
+apply squiet nquiet dquiet range z @z_1 @z_2
+
+; --- Seismic input definition ---
+def acc_amp
+  x_amp = 2.0   ; horizontal scale factor (PGA multiplier)
+  y_amp = 0.0   ; out-of-plane (not used in 2-D plane-strain)
+  z_amp = 0.0   ; vertical component (set to 0 for horizontal-only analysis)
+  ; Available records (uncomment to switch):
+  ;acc_name = 'jin'       ; artificial record, 20 s, dt=0.01
+  ;acc_name = 'eicentro'  ; El Centro 1940, 16 s, scaled to 1.3 g
+  ;acc_name = 'taft'      ; Taft 1952,       16 s, scaled to 1.35 g
+  ;acc_name = 'sin'       ; sinusoidal, 40 s, f=1.0 Hz, dt=0.01
+  ;acc_name = 'sin2'      ; sinusoidal, 40 s, f=1.0 Hz, dt=0.02
+  ;acc_name = 'sin3'      ; sinusoidal, 40 s, f=2.5 Hz, dt=0.02
+  ;acc_name = 'sin4'      ; sinusoidal, 20 s, f=1.5 Hz, dt=0.01
+  ;acc_name = 'sin5'      ; sinusoidal, 20 s, f=1.0 Hz, dt=0.02
+  ;acc_name = 'sin6'      ; sinusoidal, 20 s, f=1.0 Hz, dt=0.01
+  ;acc_name = 'jin0'      ; artificial record baseline
+  acc_name = 'taft2'      ; Taft 1952 processed record, 15 s, dt=0.02
+  acc_name_file = acc_name + '.txt'
+  acc_time = 15           ; total dynamic analysis duration (s)
+end
+@acc_amp
+
+; Apply free-field boundary and read acceleration table
+apply ff
+table 1 read @acc_name_file
+
+; Apply base acceleration in X (horizontal) and Z (vertical) directions
+apply xacc @x_amp hist table 1 range z @z_1 @z_2
+apply zacc @z_amp hist table 1 range z @z_1 @z_2
+
+; --- History reset and monitoring points ---
+hist reset
+;call point.txt
+call pointmirror.txt
+
+hist id 10 dytime
+
+; --- Slope stability definitions (cyclic FOS via strength reduction) ---
+;call 000slope.txt
+;call 000slopeyg.txt
+call 000slopeygdyna.txt
+
+; --- Cyclic FOS evaluation (every 0.1 s of dynamic time) ---
+[num_tim = 0]
+def cyc_loading
+  while_stepping
+  cal_time = dytime
+  if cal_time >= 0.1 * num_tim then
+    num_tim = num_tim + 1
+    FOS_cyc
+  endif
+end
+
+; --- Run dynamic analysis ---
+save time1111.sav
+solve age @acc_time
+[acc_name = acc_name + '_' + string(fss) + '_' + string(x_amp) + '.sav']
+sav @acc_name
+save time2222.sav
+
+return
+; =============================================================================
+; Optional: save element dynamic stresses at every time step
+; =============================================================================
+def set_arra
+  array buf(1)
+  ss_name = 'dy_' + acc_name + '_' + string(fss) + '_' + string(x_amp) + '.dat'
+  oo = open(ss_name, 1, 1)
+  buf(1) = 'cyc, zone, dtsxx, dtszz, dtsxz'
+  oo = write(buf, 1)
+  num_tim = 0
+end
+@set_arra
+
+def cyc_loading
+  while_stepping
+  cal_time = dytime
+  if cal_time >= 0.02 * num_tim then
+    buf(1) = ''
+    num_tim = num_tim + 1
+    zpnt = zone_head
+    loop while zpnt # null
+      ele_id = z_id(zpnt)
+      if ele_id <= num_z then
+        dtsxx = z_sxx(zpnt) / 1000   ; kPa
+        dtszz = z_szz(zpnt) / 1000
+        dtsxz = z_sxz(zpnt) / 1000
+        buf(1) = buf(1) + string(num_tim) + ',' + string(ele_id) + ',' + &
+                 string(dtsxx) + ',' + string(dtszz) + ',' + string(dtsxz) + '\n'
+      endif
+      zpnt = z_next(zpnt)
+    end_loop
+    oo = write(buf, 1)
+  endif
+end
+
+solve age @acc_time
+[acc_name = acc_name + '_' + string(fss) + '_' + string(x_amp) + 'yg.sav']
+[oo = close]
+sav @acc_name
+save taft150111.sav
+ret
